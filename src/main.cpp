@@ -6,6 +6,7 @@
 #include <FS.h>
 #include <WiFiManager.h> // Library WiFi Manager
 #include <ArduinoJson.h>
+#include<iostream>
 
 
 WiFiManager wm;
@@ -90,16 +91,12 @@ void loop() {
     String UIDresultSend, postData;
     UIDresultSend = StrUID;
     String endpoint = serverurl;
-    if(serverurl[-1] == '/'){
-      endpoint += UIDresultSend;
-    } else {
-      endpoint += '/'+UIDresultSend;
-    }
-   
+
+    endpoint += "check_card?uid="+UIDresultSend;
     //Post Data
     // postData = "UIDresult=" + UIDresultSend;
   
-    http.begin(client,serverurl);  //Request HTTP
+    http.begin(client,endpoint);  //Request HTTP
     // http.addHeader("Content-Type", "application/x-www-form-urlencoded"); //Content Header
    
     // int httpCode = http.POST(postData);   //Mengirim Request
@@ -121,7 +118,7 @@ void loop() {
      Serial.println(myTime);
     Serial.println(payload);    //Print request response payload
 
-  if(doc['data']['type'] == 'student'){
+  if(doc['data']['card_type'] == 'student'){
     if(studentUid == ""){
       studentUid = UIDresultSend;
     }
@@ -133,12 +130,13 @@ void loop() {
   stat = 1;
   } else if (stat > 0) {
       if(cnt==0){
-    Serial.println("Reset..");
-    ESP.restart();
+      Serial.println("Reset..");
+      ESP.restart();
   }
  
   cnt--;
   delay(1000);
+  }
   }
   } else if(WiFi.status()!= WL_CONNECTED  && stat > 0){
      Serial.println("Connection lost, Reseting & try to reconnect in 3 second");
@@ -148,7 +146,7 @@ void loop() {
   } else {
     
   }
-  }
+  
 }
 //--- Presedur Pembacaan RFID ---//
 int getid() {  
