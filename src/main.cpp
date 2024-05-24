@@ -28,7 +28,7 @@ int readsuccess;
 byte readcard[4];
 char str[32] = "";
 String StrUID;
-String serverurl = "localhost/getUID.php";
+String serverurl = "http://192.168.100.10:3000/";
 
 String studentUid;
 int studentId;
@@ -87,7 +87,7 @@ void loop() {
     myTime = millis();
 
   
-  if(readsuccess) {  
+  if(readsuccess) { 
     stat = 0;
     digitalWrite(LED_2, LOW);
     HTTPClient http;    
@@ -107,39 +107,44 @@ void loop() {
     String payload = http.getString();    //Mengambil Repsonse
     http.end();  //Close connection
 
-
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, payload);
-    if (error) {
-      Serial.print("deserializeJson() failed: ");
-      Serial.println(error.c_str());
-      return;
-    }
-
     Serial.println(UIDresultSend);
     Serial.println(httpCode);   //Print HTTP return code
     Serial.println(myTime);
     Serial.println(payload);    //Print request response payload
 
-  if(doc["data"]["card_type"] == "student"){
-    if(studentUid == ""){
-      studentUid = UIDresultSend;
-      studentId = doc["data"]["id"]; 
-    } else {
-      if(studentUid == UIDresultSend){
-        post_data();
-        return;
-      } else {
+      JsonDocument doc;
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
         return;
       }
-    }
-  } else if(doc["data"]["card_type"] == "book") {
-    if(studentUid != ""){
-      bookUid.push_back((int) doc["data"]["id"]);
-      return;
-    }
-  }
+    if(httpCode == 200){
 
+      if(doc["data"]["card_type"] == "student"){
+        if(studentUid == ""){
+          studentUid = UIDresultSend;
+          studentId = doc["data"]["id"]; 
+        } else {
+          if(studentUid == UIDresultSend){
+            post_data();
+            return;
+          } else {
+            return;
+          }
+        }
+      } else if(doc["data"]["card_type"] == "book") {
+        if(studentUid != ""){
+          bookUid.push_back((int) doc["data"]["id"]);
+          return;
+        }
+      }
+
+  } else {
+    Serial.println("Error");
+    Serial.println(httpCode);
+    Serial.println(payload);
+  }
   }
   }
   } else if(WiFi.status()!= WL_CONNECTED){
@@ -169,6 +174,7 @@ int getid() {
     array_to_string(readcard, 4, str);
     StrUID = str;
   }
+  Serial.println(StrUID);
   mfrc522.PICC_HaltA();
   return 1;
 }
@@ -212,9 +218,13 @@ void post_data(){
   http.addHeader("Content-Type", "application/x-www-form-urlencoded"); //Content Header
    
   int httpCode = http.POST(postData);   //Mengirim Request
+  Serial.println("Post the Data");
   // int httpCode = http.GET();
   if (httpCode > 0) {
     String payload = http.getString();    //Mengambil Repsonse
+    Serial.println(httpCode);
+    Serial.println(payload);
+    studentUid = "";
     http.end();  //Close connection
     return;
   }
