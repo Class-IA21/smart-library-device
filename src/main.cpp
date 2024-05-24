@@ -107,10 +107,11 @@ void loop() {
     String payload = http.getString();    //Mengambil Repsonse
     http.end();  //Close connection
 
+    Serial.print("UID : ");
     Serial.println(UIDresultSend);
+    Serial.print("HTTP Code : ");
     Serial.println(httpCode);   //Print HTTP return code
-    Serial.println(myTime);
-    Serial.println(payload);    //Print request response payload
+    // Serial.println(payload);    //Print request response payload
 
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, payload);
@@ -120,14 +121,16 @@ void loop() {
         return;
       }
     if(httpCode == 200){
-
+      Serial.println(doc["data"]["card_type"].as<String>());
+      Serial.println(doc["data"]["id"].as<String>());
       if(doc["data"]["card_type"] == "student"){
         if(studentUid == ""){
           studentUid = UIDresultSend;
-          studentId = doc["data"]["student_id"]; 
+          studentId = doc["data"]["id"]; 
         } else {
           if(studentUid == UIDresultSend){
-            post_data(doc["data"]["student_id"]);
+            studentUid = "";
+            post_data(doc["data"]["id"]);
             return;
           } else {
             return;
@@ -135,14 +138,16 @@ void loop() {
         }
       } else if(doc["data"]["card_type"] == "book") {
         if(studentUid != ""){
-          bookUid.push_back((int) doc["data"]["book_id"]);
+          bookUid.push_back((int) doc["data"]["id"]);
           return;
         }
       }
 
   } else {
     Serial.println("Error");
+    Serial.print("HTTP Code : ");
     Serial.println(httpCode);
+    Serial.print("Payload : ");
     Serial.println(payload);
   }
   }
@@ -200,11 +205,12 @@ void post_data(int studentId) {
 
   doc["student_id"] = studentId;
 
-  JsonArray jsonArray = doc.createNestedArray("book_id");
+  JsonArray jsonArray = doc.createNestedArray("book_ids");
   for (const auto& book : bookUid) {
     jsonArray.add(book);
   }
 
+  bookUid.clear();
   String postData;
   serializeJson(doc, postData);
 
