@@ -39,7 +39,7 @@ std::vector<int> bookUid;
 // put function declarations here:
 int getid();
 void array_to_string(byte array[], unsigned int len, char buffer[]);
-void post_data();
+void post_data(int studentId);
 
 void setup() {
   WiFi.mode(WIFI_STA); // Mode WiFi STA
@@ -93,7 +93,7 @@ void loop() {
     HTTPClient http;    
     WiFiClient client;
  
-    String UIDresultSend, postData;
+    String UIDresultSend;
     UIDresultSend = StrUID;
     String endpoint = serverurl;
 
@@ -124,10 +124,10 @@ void loop() {
       if(doc["data"]["card_type"] == "student"){
         if(studentUid == ""){
           studentUid = UIDresultSend;
-          studentId = doc["data"]["id"]; 
+          studentId = doc["data"]["student_id"]; 
         } else {
           if(studentUid == UIDresultSend){
-            post_data();
+            post_data(doc["data"]["student_id"]);
             return;
           } else {
             return;
@@ -135,7 +135,7 @@ void loop() {
         }
       } else if(doc["data"]["card_type"] == "book") {
         if(studentUid != ""){
-          bookUid.push_back((int) doc["data"]["id"]);
+          bookUid.push_back((int) doc["data"]["book_id"]);
           return;
         }
       }
@@ -190,44 +190,43 @@ void array_to_string(byte array[], unsigned int len, char buffer[]) {
     buffer[len*2] = '\0';
 }
 
-void post_data(){
+void post_data(int studentId) {
   HTTPClient http;    
   WiFiClient client;
- 
-  String UIDresultSend, postData;
-  UIDresultSend = StrUID;
-  String endpoint = serverurl;
 
-  DynamicJsonDocument doc(1024);  // Adjust size as necessary
+  String endpoint = serverurl + "borrow";
 
-  // Add vector elements to the JSON array
-  JsonArray jsonArray = doc.to<JsonArray>();
-  for (size_t i = 0; i < bookUid.size(); i++) {
-    jsonArray.add(bookUid[i]);
+  DynamicJsonDocument doc(1024); 
+
+  doc["student_id"] = studentId;
+
+  JsonArray jsonArray = doc.createNestedArray("book_id");
+  for (const auto& book : bookUid) {
+    jsonArray.add(book);
   }
 
-  // Serialize the JSON array to a string
-  String jsonString;
-  serializeJson(doc, jsonString);
+  String postData;
+  serializeJson(doc, postData);
 
-  endpoint += "borrow";
-    //Post Data
-  postData = "student_id=" + UIDresultSend+"&book_id="+jsonString;
-  
-  http.begin(client,endpoint);  //Request HTTP
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded"); //Content Header
-   
-  int httpCode = http.POST(postData);   //Mengirim Request
-  Serial.println("Post the Data");
-  // int httpCode = http.GET();
+  Serial.println(postData);
+
+  // Begin HTTP request
+  http.begin(client, endpoint);  
+  http.addHeader("Content-Type", "application/json"); 
+
+  // Send POST request
+  int httpCode = http.POST(postData);
+
+  // Check the response code
   if (httpCode > 0) {
-    String payload = http.getString();    //Mengambil Repsonse
+    String payload = http.getString(); // Get the response
     Serial.println(httpCode);
     Serial.println(payload);
-    studentUid = "";
-    http.end();  //Close connection
-    return;
+  } else {
+    Serial.println("Error in HTTP request");
+    Serial.println(http.errorToString(httpCode));
   }
-  http.end();  //Close connection
-  return;
+
+  // End HTTP connection
+  http.end(); 
 }
