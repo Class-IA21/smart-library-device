@@ -6,7 +6,7 @@
 #include <FS.h>
 #include <WiFiManager.h> // Library WiFi Manager
 #include <ArduinoJson.h>
-#include<iostream>
+#include <vector>
 
 
 WiFiManager wm;
@@ -31,10 +31,15 @@ String StrUID;
 String serverurl = "localhost/getUID.php";
 
 String studentUid;
+int studentId;
+// String bookUid[];
+
+std::vector<int> bookUid;
 
 // put function declarations here:
 int getid();
 void array_to_string(byte array[], unsigned int len, char buffer[]);
+void post_data();
 
 void setup() {
   WiFi.mode(WIFI_STA); // Mode WiFi STA
@@ -93,19 +98,17 @@ void loop() {
     String endpoint = serverurl;
 
     endpoint += "check_card?uid="+UIDresultSend;
-    //Post Data
-    // postData = "UIDresult=" + UIDresultSend;
   
     http.begin(client,endpoint);  //Request HTTP
-    // http.addHeader("Content-Type", "application/x-www-form-urlencoded"); //Content Header
-   
-    // int httpCode = http.POST(postData);   //Mengirim Request
+
     int httpCode = http.GET();
     if (httpCode > 0) {
 
     String payload = http.getString();    //Mengambil Repsonse
+    http.end();  //Close connection
 
-    StaticJsonDocument<1024> doc;
+
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     if (error) {
       Serial.print("deserializeJson() failed: ");
@@ -115,30 +118,31 @@ void loop() {
 
     Serial.println(UIDresultSend);
     Serial.println(httpCode);   //Print HTTP return code
-     Serial.println(myTime);
+    Serial.println(myTime);
     Serial.println(payload);    //Print request response payload
 
-  if(doc['data']['card_type'] == 'student'){
+  if(doc["data"]["card_type"] == "student"){
     if(studentUid == ""){
       studentUid = UIDresultSend;
+      studentId = doc["data"]["id"]; 
+    } else {
+      if(studentUid == UIDresultSend){
+        post_data();
+        return;
+      } else {
+        return;
+      }
+    }
+  } else if(doc["data"]["card_type"] == "book") {
+    if(studentUid != ""){
+      bookUid.push_back((int) doc["data"]["id"]);
+      return;
     }
   }
-    
-    http.end();  //Close connection
-    delay(1000);
-  digitalWrite(LED_2, HIGH);
-  stat = 1;
-  } else if (stat > 0) {
-      if(cnt==0){
-      Serial.println("Reset..");
-      ESP.restart();
-  }
- 
-  cnt--;
-  delay(1000);
+
   }
   }
-  } else if(WiFi.status()!= WL_CONNECTED  && stat > 0){
+  } else if(WiFi.status()!= WL_CONNECTED){
      Serial.println("Connection lost, Reseting & try to reconnect in 3 second");
      delay(5000);
      Serial.println("Reset..");
@@ -178,4 +182,42 @@ void array_to_string(byte array[], unsigned int len, char buffer[]) {
         buffer[i*2+1] = nib2  < 0xA ? '0' + nib2  : 'A' + nib2  - 0xA;
     }
     buffer[len*2] = '\0';
+}
+
+void post_data(){
+  HTTPClient http;    
+  WiFiClient client;
+ 
+  String UIDresultSend, postData;
+  UIDresultSend = StrUID;
+  String endpoint = serverurl;
+
+  DynamicJsonDocument doc(1024);  // Adjust size as necessary
+
+  // Add vector elements to the JSON array
+  JsonArray jsonArray = doc.to<JsonArray>();
+  for (size_t i = 0; i < bookUid.size(); i++) {
+    jsonArray.add(bookUid[i]);
+  }
+
+  // Serialize the JSON array to a string
+  String jsonString;
+  serializeJson(doc, jsonString);
+
+  endpoint += "borrow";
+    //Post Data
+  postData = "student_id=" + UIDresultSend+"&book_id="+jsonString;
+  
+  http.begin(client,endpoint);  //Request HTTP
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded"); //Content Header
+   
+  int httpCode = http.POST(postData);   //Mengirim Request
+  // int httpCode = http.GET();
+  if (httpCode > 0) {
+    String payload = http.getString();    //Mengambil Repsonse
+    http.end();  //Close connection
+    return;
+  }
+  http.end();  //Close connection
+  return;
 }
