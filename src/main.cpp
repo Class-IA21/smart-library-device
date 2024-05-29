@@ -15,8 +15,9 @@ WiFiManager wm;
 #define RST_PIN 5 //D1
 MFRC522 mfrc522(SS_PIN, RST_PIN);  
 
-#define LED_1 0
+#define LED_1 16
 #define LED_2 2
+#define buttonPin 0
 
 #define DEVICE_NAME "Smart Library"
 
@@ -28,11 +29,20 @@ int readsuccess;
 byte readcard[4];
 char str[32] = "";
 String StrUID;
-String serverurl = "http://192.168.100.10:3000/";
+String serverurl = "http://kompres.faizrashid.my.id:3000/";
 
 String studentUid;
 int studentId;
 // String bookUid[];
+
+const unsigned long debounceDelay = 50; // Delay to debounce button
+unsigned long lastDebounceTime = 0;
+int buttonState = HIGH;
+int lastButtonState = HIGH;
+unsigned long pressStartTime = 0;
+unsigned long longPressDuration = 3000; // Long press duration in milliseconds
+
+bool adminState = false;
 
 std::vector<int> bookUid;
 
@@ -40,6 +50,7 @@ std::vector<int> bookUid;
 int getid();
 void array_to_string(byte array[], unsigned int len, char buffer[]);
 void post_data(int studentId);
+void adminStateAction();
 
 void setup() {
   WiFi.mode(WIFI_STA); // Mode WiFi STA
@@ -54,6 +65,7 @@ void setup() {
 
   pinMode(LED_1,OUTPUT); 
   pinMode(LED_2,OUTPUT); 
+  pinMode(buttonPin,INPUT_PULLUP); 
 
   wm.setConfigPortalTimeout(75);
 
@@ -62,7 +74,7 @@ void setup() {
   wm.setAPStaticIPConfig(IPAddress(10,0,1,1), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
   if(wm.autoConnect(DEVICE_NAME)){
         Serial.println("WiFi Connected");
-        digitalWrite(LED_2, HIGH); 
+        digitalWrite(LED_2, LOW); 
         
         Serial.println("");
         Serial.print("Successfully connected to : ");
@@ -81,15 +93,64 @@ void setup() {
 }
 
 void loop() {
+  // Read the state of the button
+  int reading = digitalRead(buttonPin);
+
+  // Check if the button state has changed
+  if (reading != lastButtonState) {
+    // Reset the debounce timer
+    lastDebounceTime = millis();
+  }
+
+  // Check if the debounce delay has passed
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+
+    // If the button state has changed
+    if (reading != buttonState) {
+      buttonState = reading;
+
+      // If the button is pressed
+      if (buttonState == LOW) {
+        pressStartTime = millis();
+        Serial.println("BUTTON DIPENCET");
+      } else { // Button is released
+        // Calculate the duration of the press
+        unsigned long pressDuration = millis() - pressStartTime;
+
+        // Perform actions based on the press duration
+        if (pressDuration < longPressDuration) {
+          // Short press action
+          Serial.println("Short press");
+
+          adminState = !adminState;
+          Serial.println("Admin State : "+ adminState);
+          // Perform task for short press
+        } else {
+          // Long press action
+          Serial.println("Long press");
+          ESP.restart();
+          // Perform task for long press
+        }
+      }
+    }
+  }
+
+  // Save the current button state for the next iteration
+  lastButtonState = reading;
+
+
   if(WiFi.status() == WL_CONNECTED){
     stat = 1;
     readsuccess = getid();
     myTime = millis();
-
   
+  if(adminState){
+    digitalWrite(LED_2,HIGH);
+    adminStateAction();
+  }else {
+  digitalWrite(LED_2,LOW);
   if(readsuccess) { 
     stat = 0;
-    digitalWrite(LED_2, LOW);
     HTTPClient http;    
     WiFiClient client;
  
@@ -97,7 +158,7 @@ void loop() {
     UIDresultSend = StrUID;
     String endpoint = serverurl;
 
-    endpoint += "check_card?uid="+UIDresultSend;
+    endpoint += "cards/check_card?uid="+UIDresultSend;
   
     http.begin(client,endpoint);  //Request HTTP
 
@@ -125,12 +186,14 @@ void loop() {
       Serial.println(doc["data"]["id"].as<String>());
       if(doc["data"]["card_type"] == "student"){
         if(studentUid == ""){
+          digitalWrite(LED_2, HIGH);
           studentUid = UIDresultSend;
           studentId = doc["data"]["id"]; 
         } else {
           if(studentUid == UIDresultSend){
             studentUid = "";
             post_data(doc["data"]["id"]);
+            digitalWrite(LED_2, LOW);
             return;
           } else {
             return;
@@ -149,6 +212,7 @@ void loop() {
     Serial.println(httpCode);
     Serial.print("Payload : ");
     Serial.println(payload);
+  }
   }
   }
   }
@@ -199,7 +263,7 @@ void post_data(int studentId) {
   HTTPClient http;    
   WiFiClient client;
 
-  String endpoint = serverurl + "borrow";
+  String endpoint = serverurl + "borrows";
 
   DynamicJsonDocument doc(1024); 
 
@@ -236,3 +300,44 @@ void post_data(int studentId) {
   // End HTTP connection
   http.end(); 
 }
+
+void adminStateAction(){
+  if(readsuccess) { 
+    stat = 0;
+    HTTPClient http;    
+    WiFiClient client;
+
+    String endpoint = serverurl + "cards/container_card";
+    String UIDresultSend;
+    UIDresultSend = StrUID;
+
+    DynamicJsonDocument doc(1024); 
+
+    doc["uid"] = UIDresultSend;
+
+    String postData;
+    serializeJson(doc, postData);
+
+    Serial.println(postData);
+
+    // Begin HTTP request
+    http.begin(client, endpoint);  
+    http.addHeader("Content-Type", "application/json"); 
+
+    // Send POST request
+    int httpCode = http.POST(postData);
+
+    // Check the response code
+    if (httpCode > 0) {
+      String payload = http.getString(); // Get the response
+      Serial.println(httpCode);
+      Serial.println(payload);
+    } else {
+      Serial.println("Error in HTTP request");
+      Serial.println(http.errorToString(httpCode));
+    }
+
+    // End HTTP connection
+    http.end(); 
+    }
+  }
